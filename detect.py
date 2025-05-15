@@ -3,9 +3,11 @@ from torchvision import transforms
 from PIL import Image, ImageDraw
 from model import EAST
 import os
+import sys
 from dataset import get_rotate_mat
 import numpy as np
 import lanms
+import time
 
 
 def resize_img(img):
@@ -179,19 +181,65 @@ def detect_dataset(model, device, test_img_path, submit_path):
 		with open(os.path.join(submit_path, 'res_' + os.path.basename(img_file).replace('.jpg','.txt')), 'w') as f:
 			f.writelines(seq)
 
+def process_single(model, device, img_path, out_path):
+	img = Image.open(img_path)
+	print(f"Processing bounding boxes for: {img_path}")
+	boxes = detect(img, model, device)
+	plotted_bxs = plot_boxes(img, boxes)
+	print(f"Saving outputput to: {out_path}")
+	plotted_bxs.save(out_path)
+
+
+def procces_batch(model, device, dir_path, output_path):
+	os.mkdir(output_path)
+	with os.scandir(dir_path) as entries: 
+		for entry in entries: 
+			if entry.is_file(): 
+				process_single(model, device, entry.path, os.path.join(output_path, f"{'.'.join(entry.name.split('.')[:-1])}.bmp"))
+	
+
+MODES = ('single', 'batch')
+def parse_args(): 
+	if len(sys.argv) != 4: 
+		raise ValueError(f"Usage: mode file_input dest")
+	args = sys.argv[1:]
+	mode, file_in, destination = args
+	if not mode in MODES:
+		raise ValueError(f'Invalid mode {mode}: expected one of: {MODES}')
+	if not os.path.exists(file_in): 
+		raise ValueError(f"Input path does not exists: {file_in}")
+	if os.path.exists(destination): 
+		raise ValueError(f"Output destination already exists: {destination}")
+	
+	if mode == 'batch' and not os.path.isdir(file_in): 
+		raise ValueError("Input path must be a directory for batch mode")
+	
+	if mode == 'single' and not os.path.is_file(file_in): 
+		raise ValueError("Input path must be a file in single mode")
+		
+	return mode, file_in, destination	
+
+def init_model():
+	model_path  = './pths/east_vgg16.pth' 
+	device = torch.device("cpu")
+	model = EAST().to(device)
+	model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
+	model.eval()
+	return model, device
+
+def main(): 
+	mode, file_in, destination = parse_args()
+	model, device = init_model()
+	if mode == 'single': 
+		process_single(model, device, file_in, destination)
+	elif mode == 'batch':
+		procces_batch(model, device, file_in, destination)
+
 
 if __name__ == '__main__':
-	img_path    = '../ICDAR_2015/test_img/img_2.jpg'
-	model_path  = './pths/east_vgg16.pth'
-	res_img     = './res.bmp'
-	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-	model = EAST().to(device)
-	model.load_state_dict(torch.load(model_path))
-	model.eval()
-	img = Image.open(img_path)
-	
-	boxes = detect(img, model, device)
-	plot_img = plot_boxes(img, boxes)	
-	plot_img.save(res_img)
+	"""
+	Example usage: python3 detect.py batch ../ICDAR_2015/demo ./results
+	"""
+	main()
 
 
