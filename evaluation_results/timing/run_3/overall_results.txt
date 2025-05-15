@@ -1,0 +1,6 @@
+Number of images: 20
+Evaluation time: 345.8717544078827
+Average time: 17.293587720394136
+Minimum time: 16.097942113876343
+Maximum time: 17.93629813194275
+
