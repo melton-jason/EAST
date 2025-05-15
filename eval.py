@@ -35,8 +35,8 @@ def eval_model(model_name, test_img_path, submit_path, save_flag=True):
 		shutil.rmtree(submit_path)
 
  
- def parse_args():
-	if len(sys.argv) != 3: 
+def parse_args():
+	if len(sys.argv) != 3:
 		raise ValueError(f"Usage: dir_input destination")
 	args = sys.argv[1:]
 	file_in, destination = args
@@ -45,7 +45,7 @@ def eval_model(model_name, test_img_path, submit_path, save_flag=True):
 		raise ValueError(f"Input path does not exists: {file_in}")
 	if os.path.exists(destination): 
 		raise ValueError(f"Output destination already exists: {destination}")
-	
+
 	if not os.path.isdir(file_in): 
 		raise ValueError("Input path must be a directory")
 		

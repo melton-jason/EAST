@@ -214,7 +214,7 @@ def parse_args():
 	if mode == 'batch' and not os.path.isdir(file_in): 
 		raise ValueError("Input path must be a directory for batch mode")
 	
-	if mode == 'single' and not os.path.is_file(file_in): 
+	if mode == 'single' and not os.path.isfile(file_in): 
 		raise ValueError("Input path must be a file in single mode")
 		
 	return mode, file_in, destination	
