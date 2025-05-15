@@ -184,26 +184,61 @@ def detect_dataset(model, device, test_img_path, submit_path):
 def process_single(model, device, img_path, out_path):
 	img = Image.open(img_path)
 	print(f"Processing bounding boxes for: {img_path}")
+	start_time = time.time()
 	boxes = detect(img, model, device)
+	box_time = time.time()
+	final_time = box_time - start_time
+	print(f"Text bounding boxes detected in {final_time} seconds")
+	print("Plotting boxes to image copy")
 	plotted_bxs = plot_boxes(img, boxes)
 	print(f"Saving outputput to: {out_path}")
 	plotted_bxs.save(out_path)
+	return final_time
 
 
 def procces_batch(model, device, dir_path, output_path):
 	os.mkdir(output_path)
+	result_times = []
 	with os.scandir(dir_path) as entries: 
 		for entry in entries: 
-			if entry.is_file(): 
-				process_single(model, device, entry.path, os.path.join(output_path, f"{'.'.join(entry.name.split('.')[:-1])}.bmp"))
+			if entry.is_file():
+				image_out_path = os.path.join(output_path, f"{'.'.join(entry.name.split('.')[:-1])}.bmp")
+				eval_time = process_single(model, device, entry.path, image_out_path)
+				result_times.append(eval_time)
+	
+	print(f"Finished plotting bounding boxes for {dir_path}")
+	total_time, average_time, num_images, min_time, max_time = get_statistics(result_times)
+	print(f"Number of images: {num_images}")
+	print(f"Evaluation time: {total_time}")
+	print(f"Average time: {average_time}")
+	print(f"Minimum time: {min_time}")
+	print(f"Maximum time: {max_time}")
+	
+def get_statistics(input_list): 
+	minimum = 999999999
+	maximum = 0
+	length = 0
+	running_sum = 0
+	for number in input_list: 
+		if number < minimum: 
+			minimum = number
+		elif number > maximum: 
+			maximum = number
+		
+		running_sum += number
+		length += 1
+	average = running_sum / length
+	return running_sum, average, length, minimum, maximum 
+	
 	
 
 MODES = ('single', 'batch')
 def parse_args(): 
 	if len(sys.argv) != 4: 
-		raise ValueError(f"Usage: mode file_input dest")
+		raise ValueError(f"Usage: mode file_input destination")
 	args = sys.argv[1:]
 	mode, file_in, destination = args
+	
 	if not mode in MODES:
 		raise ValueError(f'Invalid mode {mode}: expected one of: {MODES}')
 	if not os.path.exists(file_in): 
@@ -216,6 +251,7 @@ def parse_args():
 	
 	if mode == 'single' and not os.path.isfile(file_in): 
 		raise ValueError("Input path must be a file in single mode")
+	
 		
 	return mode, file_in, destination	
 
