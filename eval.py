@@ -6,23 +6,22 @@ import os
 import numpy as np
 import shutil
 import sys
+import argparse
 
 from model import EAST
 from detect import detect_dataset
 
 
-def eval_model(model_name, test_img_path, validation_zip, submit_path, save_flag=True):
+def eval_model(model_name, test_img_path, validation_zip, submit_path, save_flag=True, quantize=True):
 	if os.path.exists(submit_path):
 		shutil.rmtree(submit_path) 
 	os.mkdir(submit_path)
 
 	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-	
-	is_quant = 'quant' in sys.argv
 
-	model = EAST(False, is_quant=is_quant).to(device)
+	model = EAST(False, is_quant=quantize).to(device)
 
-	if is_quant:
+	if quantize:
 		model.prepare_for_quantization()   # must include quant/dequant stubs
 		torch.quantization.convert(model, inplace=True)  # convert BEFORE loading
 		model_name = './pths_quantized/east_quantized.pth'
@@ -46,10 +45,21 @@ def eval_model(model_name, test_img_path, validation_zip, submit_path, save_flag
 
  
 def parse_args():
-	if len(sys.argv) < 4:
-		raise ValueError(f"Usage: img_input_dir validation_zip destination")
-	args = sys.argv[1:]
-	file_in, validation_zip, destination = args[:3]
+	
+	parser = argparse.ArgumentParser(description="Evaluate the accuracy of the model")
+	
+	parser.add_argument('--expected', help="A path to a zip file containing files which contain the true bounding boxes for text", required=True)
+	parser.add_argument('--input', help="The path to a directory of images which will be evaluated", required=True)
+	parser.add_argument('--out', help="The desired name of the output directory. Will contain the generated bounding boxes for text in the images in text format", required=True)
+	parser.add_argument('--quantize', default=True, action='store_true')
+	parser.add_argument('--no-quantize', dest='quantize', action='store_false')
+	
+	args = parser.parse_args()
+	
+	file_in = args.input
+	validation_zip = args.expected
+	destination = args.out
+	quantize = args.quantize
 
 	if not os.path.exists(file_in): 
 		raise ValueError(f"Input path does not exists: {file_in}")
@@ -61,16 +71,16 @@ def parse_args():
 	if not os.path.isdir(file_in): 
 		raise ValueError("Input path must be a directory")
 		
-	return file_in, validation_zip, destination 
+	return file_in, validation_zip, destination, quantize 
 
 def main(): 
 	"""
-	Example usage: python3 eval.py ../ICDAR_2015/test_img/ ./evaluate/gt.zip eval_results
+	Example usage: python3 eval.py --input ../ICDAR_2015/test_img/ --expected ./evaluate/gt.zip --out eval_results
 	"""
 	
 	model_name = './pths/east_vgg16.pth'
-	input_dir, validation_zip, output_dir = parse_args()
-	eval_model(model_name, input_dir, validation_zip, output_dir)
+	input_dir, validation_zip, output_dir, quantize = parse_args()
+	eval_model(model_name, input_dir, validation_zip, output_dir, quantize=quantize)
 	
  
 if __name__ == '__main__': 

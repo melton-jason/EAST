@@ -8,6 +8,7 @@ from dataset import get_rotate_mat
 import numpy as np
 import lanms
 import time
+import argparse
 
 
 def resize_img(img):
@@ -233,14 +234,22 @@ def get_statistics(input_list):
 	
 
 MODES = ('single', 'batch')
-def parse_args(): 
-	if len(sys.argv) < 4: 
-		raise ValueError(f"Usage: mode file_input destination")
-	args = sys.argv[1:]
-	mode, file_in, destination = args[:3]
+def parse_args():
+	parser = argparse.ArgumentParser(description="Given an image or a directory of images, detect text in the image and generate images with colored bounding boxes around text")
 	
-	if not mode in MODES:
-		raise ValueError(f'Invalid mode {mode}: expected one of: {MODES}')
+	parser.add_argument('--mode',required=True , choices=MODES)
+	parser.add_argument('--input', help="The input image or directory. Expected directory if --mode is batch and single file if --mode is single", required=True)
+	parser.add_argument('--out', help="The name of the output directory or file. If --mode is single, the outputted image will be in bitmap format. Otherwise, the output will be a directory", required=True)
+	parser.add_argument('--quantize', default=True, action='store_true')
+	parser.add_argument('--no-quantize', dest='quantize', action='store_false')
+	
+	args = parser.parse_args()
+	
+	mode = args.mode
+	file_in = args.input
+	destination = args.out
+	quantize = args.quantize
+	
 	if not os.path.exists(file_in): 
 		raise ValueError(f"Input path does not exists: {file_in}")
 	if os.path.exists(destination): 
@@ -253,17 +262,15 @@ def parse_args():
 		raise ValueError("Input path must be a file in single mode")
 	
 		
-	return mode, file_in, destination	
+	return mode, file_in, destination, quantize
 
-def init_model():
+def init_model(quantize):
 	model_path  = './pths/east_vgg16.pth' 
 	device = torch.device("cpu")
 
-	is_quant = 'quant' in sys.argv
+	model = EAST(is_quant=quantize).to(device)
 
-	model = EAST(is_quant=is_quant).to(device)
-
-	if is_quant:
+	if quantize:
 		model.prepare_for_quantization()   # must include quant/dequant stubs
 		torch.quantization.convert(model, inplace=True)  # convert BEFORE loading
 		model_path = './pths_quantized/east_quantized.pth'
@@ -273,8 +280,8 @@ def init_model():
 	return model, device
 
 def main(): 
-	mode, file_in, destination = parse_args()
-	model, device = init_model()
+	mode, file_in, destination, quantize = parse_args()
+	model, device = init_model(quantize)
 	if mode == 'single': 
 		process_single(model, device, file_in, destination)
 	elif mode == 'batch':
@@ -283,7 +290,7 @@ def main():
 
 if __name__ == '__main__':
 	"""
-	Example usage: python3 detect.py batch ../ICDAR_2015/demo ./results
+	Example usage: python3 detect.py --mode batch --input ../ICDAR_2015/demo --out ./results
 	"""
 	main()
 
