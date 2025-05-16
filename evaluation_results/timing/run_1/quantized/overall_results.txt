@@ -1,0 +1,21 @@
+Model Times
+Number of images: 20
+Evaluation time: 243.52037239074707
+Average time: 12.176018619537354
+Minimum time: 10.408254146575928
+Maximum time: 12.535764217376709
+
+Bounding Box times
+Number of images: 20
+Evaluation time: 0.44232606887817383
+Average time: 0.02211630344390869
+Minimum time: 0.0029230117797851562
+Maximum time: 0.07538914680480957
+
+Overall Times
+Number of images: 20
+Evaluation time: 243.96269845962524
+Average time: 12.198134922981263
+Minimum time: 10.432337999343872
+Maximum time: 12.557332515716553
+
