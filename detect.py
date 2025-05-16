@@ -234,10 +234,10 @@ def get_statistics(input_list):
 
 MODES = ('single', 'batch')
 def parse_args(): 
-	if len(sys.argv) != 4: 
+	if len(sys.argv) < 4: 
 		raise ValueError(f"Usage: mode file_input destination")
 	args = sys.argv[1:]
-	mode, file_in, destination = args
+	mode, file_in, destination = args[:3]
 	
 	if not mode in MODES:
 		raise ValueError(f'Invalid mode {mode}: expected one of: {MODES}')
@@ -258,8 +258,17 @@ def parse_args():
 def init_model():
 	model_path  = './pths/east_vgg16.pth' 
 	device = torch.device("cpu")
-	model = EAST().to(device)
-	model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
+
+	is_quant = 'quant' in sys.argv
+
+	model = EAST(is_quant=is_quant).to(device)
+
+	if is_quant:
+		model.prepare_for_quantization()   # must include quant/dequant stubs
+		torch.quantization.convert(model, inplace=True)  # convert BEFORE loading
+		model_path = './pths_quantized/east_quantized.pth'
+
+	model.load_state_dict(torch.load(model_path, map_location=torch.device(device)))
 	model.eval()
 	return model, device
 

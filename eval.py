@@ -5,6 +5,7 @@ import sys
 import os
 import numpy as np
 import shutil
+import sys
 
 from model import EAST
 from detect import detect_dataset
@@ -16,8 +17,17 @@ def eval_model(model_name, test_img_path, validation_zip, submit_path, save_flag
 	os.mkdir(submit_path)
 
 	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-	model = EAST(False).to(device)
-	model.load_state_dict(torch.load(model_name, map_location=torch.device("cpu")))
+	
+	is_quant = 'quant' in sys.argv
+
+	model = EAST(False, is_quant=is_quant).to(device)
+
+	if is_quant:
+		model.prepare_for_quantization()   # must include quant/dequant stubs
+		torch.quantization.convert(model, inplace=True)  # convert BEFORE loading
+		model_name = './pths_quantized/east_quantized.pth'
+
+	model.load_state_dict(torch.load(model_name, map_location=device))
 	model.eval()
 	
 	start_time = time.time()
@@ -36,10 +46,10 @@ def eval_model(model_name, test_img_path, validation_zip, submit_path, save_flag
 
  
 def parse_args():
-	if len(sys.argv) != 4:
+	if len(sys.argv) < 4:
 		raise ValueError(f"Usage: img_input_dir validation_zip destination")
 	args = sys.argv[1:]
-	file_in, validation_zip, destination = args
+	file_in, validation_zip, destination = args[:3]
 
 	if not os.path.exists(file_in): 
 		raise ValueError(f"Input path does not exists: {file_in}")
