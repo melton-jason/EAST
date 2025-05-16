@@ -4,6 +4,7 @@ import torch.utils.model_zoo as model_zoo
 import torch.nn.functional as F
 import math
 
+torch.backends.quantized.engine = 'qnnpack'
 
 cfg = [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M']
 
@@ -134,7 +135,8 @@ class merge(nn.Module):
 		return y
 
 class output(nn.Module):
-	def __init__(self, scope=512):
+	def __init__(self, scope=512, is_quant=False):
+		self.is_quant = is_quant
 		super(output, self).__init__()
 		self.conv1 = nn.Conv2d(32, 1, 1)
 		self.sigmoid1 = nn.Sigmoid()
@@ -151,21 +153,54 @@ class output(nn.Module):
 
 	def forward(self, x):
 		score = self.sigmoid1(self.conv1(x))
-		loc   = self.sigmoid2(self.conv2(x)) * self.scope
-		angle = (self.sigmoid3(self.conv3(x)) - 0.5) * math.pi
+
+		loc_quant = self.sigmoid2(self.conv2(x))
+		if self.is_quant:
+			loc_quant = loc_quant.dequantize()
+		loc = loc_quant * self.scope
+
+		angle_quant = self.sigmoid3(self.conv3(x))
+		if self.is_quant:
+			angle_quant = angle_quant.dequantize()
+		angle = (angle_quant - 0.5) * math.pi
 		geo   = torch.cat((loc, angle), 1) 
 		return score, geo
 		
 	
 class EAST(nn.Module):
-	def __init__(self, pretrained=True):
+	def __init__(self, pretrained=True, is_quant=False):
 		super(EAST, self).__init__()
+		self.quant = torch.quantization.QuantStub()
 		self.extractor = extractor(pretrained)
 		self.merge     = merge()
-		self.output    = output()
+		self.output    = output(is_quant=is_quant)
+		self.dequant = torch.quantization.DeQuantStub()
 	
 	def forward(self, x):
-		return self.output(self.merge(self.extractor(x)))
+		x = self.quant(x)
+		x = self.extractor(x)
+		x = self.merge(x)
+		x = self.output(x)
+		x = tuple(self.dequant(t) for t in x)
+		return x
+
+	def prepare_for_quantization(self):
+		self.eval()
+
+		# Fuse only Conv2d + BatchNorm2d + ReLU blocks
+		for name, module in self.named_children():
+			if hasattr(module, 'features'):
+				for i in range(len(module.features) - 2):
+					layers = module.features[i:i+3]
+					if (isinstance(layers[0], nn.Conv2d) and 
+						isinstance(layers[1], nn.BatchNorm2d) and 
+						isinstance(layers[2], nn.ReLU)):
+						torch.quantization.fuse_modules(
+							module.features, [f'{i}', f'{i+1}', f'{i+2}'], inplace=True
+						)
+
+		self.qconfig = torch.quantization.get_default_qconfig('qnnpack')
+		torch.quantization.prepare(self, inplace=True)
 		
 
 if __name__ == '__main__':
