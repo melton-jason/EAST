@@ -29,15 +29,16 @@ def eval_model(model_name, test_img_path, validation_zip, submit_path, save_flag
 	model.load_state_dict(torch.load(model_name, map_location=device))
 	model.eval()
 	
+	base_dir = os.getcwd()
 	start_time = time.time()
 	detect_dataset(model, device, test_img_path, submit_path)
 	os.chdir(submit_path)
-	res = subprocess.getoutput('zip -q submit.zip *.txt')
+	res = subprocess.getoutput(f'zip -q {os.path.join(base_dir, "submit.zip")} *.txt')
 	res = subprocess.getoutput('mv submit.zip ../')
-	os.chdir('../')
+	os.chdir(base_dir)
 	res = subprocess.getoutput(f'python ./evaluate/script.py –g={validation_zip} –s=./submit.zip')
 	print(res)
-	os.remove('./submit.zip')
+	os.remove(os.path.join(base_dir, "submit.zip"))
 	print('eval time is {}'.format(time.time()-start_time))	
 
 	if not save_flag:
@@ -80,6 +81,7 @@ def main():
 	
 	model_name = './pths/east_vgg16.pth'
 	input_dir, validation_zip, output_dir, quantize = parse_args()
+
 	eval_model(model_name, input_dir, validation_zip, output_dir, quantize=quantize)
 	
  
