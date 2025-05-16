@@ -145,9 +145,13 @@ def detect(img, model, device):
 	'''
 	img, ratio_h, ratio_w = resize_img(img)
 	with torch.no_grad():
+		model_start = time.time()
 		score, geo = model(load_pil(img).to(device))
+		model_time = time.time() - model_start
+	box_start = time.time()
 	boxes = get_boxes(score.squeeze(0).cpu().numpy(), geo.squeeze(0).cpu().numpy())
-	return adjust_ratio(boxes, ratio_w, ratio_h)
+	box_time = time.time() - box_start
+	return adjust_ratio(boxes, ratio_w, ratio_h), model_time, box_time 
 
 
 def plot_boxes(img, boxes):
@@ -175,7 +179,7 @@ def detect_dataset(model, device, test_img_path, submit_path):
 	
 	for i, img_file in enumerate(img_files):
 		print('evaluating {} image'.format(i), end='\r')
-		boxes = detect(Image.open(img_file), model, device)
+		boxes, model_time, box_time = detect(Image.open(img_file), model, device)
 		seq = []
 		if boxes is not None:
 			seq.extend([','.join([str(int(b)) for b in box[:-1]]) + '\n' for box in boxes])
@@ -185,35 +189,56 @@ def detect_dataset(model, device, test_img_path, submit_path):
 def process_single(model, device, img_path, out_path):
 	img = Image.open(img_path)
 	print(f"Processing bounding boxes for: {img_path}")
-	start_time = time.time()
-	boxes = detect(img, model, device)
-	box_time = time.time()
-	final_time = box_time - start_time
-	print(f"Text bounding boxes detected in {final_time} seconds")
+	boxes, model_time, box_time = detect(img, model, device)
+	print(f"Model evaluation time: {model_time} seconds")
+	print(f"Bounding box evaluation time: {box_time} seconds")
+	print(f"Total text bounding box evaluation time: {model_time + box_time} seconds")
 	print("Plotting boxes to image copy")
 	plotted_bxs = plot_boxes(img, boxes)
 	print(f"Saving outputput to: {out_path}")
 	plotted_bxs.save(out_path)
-	return final_time
+	return model_time, box_time
 
 
 def procces_batch(model, device, dir_path, output_path):
 	os.mkdir(output_path)
+	model_times = []
+	box_times = []
 	result_times = []
 	with os.scandir(dir_path) as entries: 
 		for entry in entries: 
 			if entry.is_file():
 				image_out_path = os.path.join(output_path, f"{'.'.join(entry.name.split('.')[:-1])}.bmp")
-				eval_time = process_single(model, device, entry.path, image_out_path)
-				result_times.append(eval_time)
+				model_time, box_time = process_single(model, device, entry.path, image_out_path)
+				model_times.append(model_time)
+				box_times.append(box_time)
+				result_times.append(model_time + box_time)
 	
 	print(f"Finished plotting bounding boxes for {dir_path}")
+	print("Model Times")
+	total_time, average_time, num_images, min_time, max_time = get_statistics(model_times)
+	print(f"Number of images: {num_images}")
+	print(f"Evaluation time: {total_time}")
+	print(f"Average time: {average_time}")
+	print(f"Minimum time: {min_time}")
+	print(f"Maximum time: {max_time}\n")
+	
+	print("Bounding Box times")
+	total_time, average_time, num_images, min_time, max_time = get_statistics(box_times)
+	print(f"Number of images: {num_images}")
+	print(f"Evaluation time: {total_time}")
+	print(f"Average time: {average_time}")
+	print(f"Minimum time: {min_time}")
+	print(f"Maximum time: {max_time}\n")
+	
+	print("Overall Times")
 	total_time, average_time, num_images, min_time, max_time = get_statistics(result_times)
 	print(f"Number of images: {num_images}")
 	print(f"Evaluation time: {total_time}")
 	print(f"Average time: {average_time}")
 	print(f"Minimum time: {min_time}")
 	print(f"Maximum time: {max_time}")
+	
 	
 def get_statistics(input_list): 
 	minimum = 999999999
