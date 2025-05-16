@@ -11,12 +11,12 @@ import time
 import argparse
 
 
-def resize_img(img):
+def resize_img(img, shrink=False):
 	'''resize image to be divisible by 32
 	'''
 	w, h = img.size
-	resize_w = w
-	resize_h = h
+	resize_w = w if not shrink else w // 2
+	resize_h = h if not shrink else h // 2
 
 	resize_h = resize_h if resize_h % 32 == 0 else int(resize_h / 32) * 32
 	resize_w = resize_w if resize_w % 32 == 0 else int(resize_w / 32) * 32
@@ -186,8 +186,8 @@ def detect_dataset(model, device, test_img_path, submit_path):
 		with open(os.path.join(submit_path, 'res_' + os.path.basename(img_file).replace('.jpg','.txt')), 'w') as f:
 			f.writelines(seq)
 
-def process_single(model, device, img_path, out_path):
-	img = Image.open(img_path)
+def process_single(model, device, img_path, out_path, shrink_img=False):
+	img, _, _ = resize_img(Image.open(img_path), shrink=shrink_img)
 	print(f"Processing bounding boxes for: {img_path}")
 	boxes, model_time, box_time = detect(img, model, device)
 	print(f"Model evaluation time: {model_time} seconds")
@@ -200,7 +200,7 @@ def process_single(model, device, img_path, out_path):
 	return model_time, box_time
 
 
-def procces_batch(model, device, dir_path, output_path):
+def procces_batch(model, device, dir_path, output_path, shrink_imgs=False):
 	os.mkdir(output_path)
 	model_times = []
 	box_times = []
@@ -209,7 +209,7 @@ def procces_batch(model, device, dir_path, output_path):
 		for entry in entries: 
 			if entry.is_file():
 				image_out_path = os.path.join(output_path, f"{'.'.join(entry.name.split('.')[:-1])}.bmp")
-				model_time, box_time = process_single(model, device, entry.path, image_out_path)
+				model_time, box_time = process_single(model, device, entry.path, image_out_path, shrink_img=shrink_imgs)
 				model_times.append(model_time)
 				box_times.append(box_time)
 				result_times.append(model_time + box_time)
@@ -267,6 +267,7 @@ def parse_args():
 	parser.add_argument('--out', help="The name of the output directory or file. If --mode is single, the outputted image will be in bitmap format. Otherwise, the output will be a directory", required=True)
 	parser.add_argument('--quantize', default=True, action='store_true')
 	parser.add_argument('--no-quantize', dest='quantize', action='store_false')
+	parser.add_argument('--shrink', default=False, help="Shrink the input images by half before passing them to the model", action='store_true')
 	
 	args = parser.parse_args()
 	
@@ -274,6 +275,7 @@ def parse_args():
 	file_in = args.input
 	destination = args.out
 	quantize = args.quantize
+	shrink = args.shrink
 	
 	if not os.path.exists(file_in): 
 		raise ValueError(f"Input path does not exists: {file_in}")
@@ -287,7 +289,7 @@ def parse_args():
 		raise ValueError("Input path must be a file in single mode")
 	
 		
-	return mode, file_in, destination, quantize
+	return mode, file_in, destination, quantize, shrink
 
 def init_model(quantize):
 	model_path  = './pths/east_vgg16.pth' 
@@ -305,12 +307,12 @@ def init_model(quantize):
 	return model, device
 
 def main(): 
-	mode, file_in, destination, quantize = parse_args()
+	mode, file_in, destination, quantize, shrink = parse_args()
 	model, device = init_model(quantize)
 	if mode == 'single': 
-		process_single(model, device, file_in, destination)
+		process_single(model, device, file_in, destination, shrink_imgs=shrink)
 	elif mode == 'batch':
-		procces_batch(model, device, file_in, destination)
+		procces_batch(model, device, file_in, destination, shrink_imgs=shrink)
 
 
 if __name__ == '__main__':

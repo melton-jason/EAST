@@ -46,7 +46,6 @@ def eval_model(model_name, test_img_path, validation_zip, submit_path, save_flag
 
  
 def parse_args():
-	
 	parser = argparse.ArgumentParser(description="Evaluate the accuracy of the model")
 	
 	parser.add_argument('--expected', help="A path to a zip file containing files which contain the true bounding boxes for text", required=True)
